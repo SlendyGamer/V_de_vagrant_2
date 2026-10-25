@@ -18,7 +18,7 @@ Vagrant.configure("2") do |config|
     frontend.vm.box_architecture = "arm64" if is_arm
     frontend.vm.hostname = "frontend"
 
-    frontend.vm.network "forwarded_port", guest: 5173, host: 5173, auto_correct: true
+    frontend.vm.network "forwarded_port", guest: 80, host: 8080, auto_correct: true
     frontend.vm.network "private_network", ip: "10.1.1.10", virtualbox__intnet: "front_back"
 
     # frontend.vm.synced_folder "../shared/frontend", "/home/vagrant/frontend", type: "virtualbox"
@@ -32,7 +32,7 @@ Vagrant.configure("2") do |config|
         sudo apt-get update
         sudo apt-get install -y curl net-tools git
 
-        git clone --no-checkout https://github.com/arnaldoflorenc/V_de_vagrant_2.git /home/vagrant/work
+        git clone --no-checkout https://github.com/SlendyGamer/V_de_vagrant_2.git /home/vagrant/work
         cd /home/vagrant/work
         git sparse-checkout set frontend
         git checkout
@@ -51,29 +51,35 @@ Vagrant.configure("2") do |config|
 
       cd /home/vagrant/work/frontend
       npm install
+      npm run build
       sudo chown -R vagrant:vagrant /home/vagrant/work/frontend
 
-      cat <<'EOF' | sudo tee /etc/systemd/system/frontend.service
-[Unit]
-Description=React Frontend
-After=network.target
+      sudo apt-get install -y apache2
+      sudo a2enmod proxy proxy_http rewrite
 
-[Service]
-User=vagrant
-WorkingDirectory=/home/vagrant/work/frontend
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=NODE_ENV=development
-ExecStart=/usr/bin/npm run dev -- --host 0.0.0.0
-Restart=always
-RestartSec=3
+      sudo systemctl disable --now frontend 2>/dev/null || true
+      sudo rm -f /etc/systemd/system/frontend.service
 
-[Install]
-WantedBy=multi-user.target
+      sudo rm -rf /var/www/html/*
+      sudo cp -r /home/vagrant/work/frontend/dist/. /var/www/html/
+
+      cat <<'EOF' | sudo tee /etc/apache2/sites-available/000-default.conf
+<VirtualHost *:80>
+    DocumentRoot /var/www/html
+
+    ProxyPreserveHost On
+    ProxyPass /api http://10.1.1.2:3000/api
+    ProxyPassReverse /api http://10.1.1.2:3000/api
+
+    <Directory /var/www/html>
+        Require all granted
+        FallbackResource /index.html
+    </Directory>
+</VirtualHost>
 EOF
 
-      sudo systemctl daemon-reload
-      sudo systemctl enable frontend
-      sudo systemctl restart frontend
+      sudo systemctl enable apache2
+      sudo systemctl restart apache2
       sudo touch "$MARKER"
     SHELL
   end
@@ -100,7 +106,7 @@ EOF
         sudo apt-get update
         sudo apt-get install -y curl net-tools git
 
-        git clone --no-checkout https://github.com/arnaldoflorenc/V_de_vagrant_2.git /home/vagrant/work
+        git clone --no-checkout https://github.com/SlendyGamer/V_de_vagrant_2.git /home/vagrant/work
         cd /home/vagrant/work
         git sparse-checkout set backend
         git checkout
@@ -165,7 +171,7 @@ EOF
         sudo apt-get update
         sudo apt-get install -y curl net-tools git
 
-        git clone --no-checkout https://github.com/arnaldoflorenc/V_de_vagrant_2.git /home/vagrant/work
+        git clone --no-checkout https://github.com/SlendyGamer/V_de_vagrant_2.git /home/vagrant/work
         cd /home/vagrant/work
         git sparse-checkout set db
         git checkout
@@ -196,7 +202,8 @@ EOF
   end
 
   config.vm.define "runner" do |runner|
-    runner.vm.box = box_name
+    # cgroup v2 é o padrão a partir do Ubuntu 22.04 (jammy)
+    runner.vm.box = is_arm ? "bento/ubuntu-22.04" : "ubuntu/jammy64"
     runner.vm.provider "virtualbox" do |vb|
       vb.memory = "4096"
       vb.cpus = 1
@@ -205,14 +212,65 @@ EOF
     runner.vm.hostname = "runner"
 
     runner.vm.network "private_network", ip: "10.1.3.20", virtualbox__intnet: "back_runner"
-    
+
+    runner.vm.provision "file", source: ".env", destination: "/tmp/runner.env"
+
     runner.vm.provision "shell", inline: <<-SHELL
       set -e
-      sudo apt-get update
-      sudo apt-get install -y docker.io
-      sudo systemctl enable --now docker
+
+      MARKER=/etc/vagrant_provisioned
+      export DEBIAN_FRONTEND=noninteractive
+
+      if [ ! -f "$MARKER" ]; then
+        sudo apt-get update
+        sudo apt-get install -y curl net-tools git util-linux python3
+
+        git clone --no-checkout https://github.com/SlendyGamer/V_de_vagrant_2.git /home/vagrant/work
+        cd /home/vagrant/work
+        git sparse-checkout set runner
+        git checkout
+      else
+        echo "Já provisionado anteriormente, pulando clone/setup inicial."
+        cd /home/vagrant/work
+        git pull
+      fi
+
+      if ! command -v node &> /dev/null; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+      fi
+
       sudo mkdir -p /srv/runner/scripts /srv/runner/logs
-      SHELL
+
+      {
+        grep '^RUNNER_TOKEN=' /tmp/runner.env
+        echo "BIND=10.1.3.20"
+        echo "PORT=4000"
+      } | sudo tee /etc/runner-agent.env > /dev/null
+      sudo chmod 600 /etc/runner-agent.env
+
+      cat <<'EOF' | sudo tee /etc/systemd/system/runner-agent.service
+[Unit]
+Description=Runner agent (namespaces + cgroups v2)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/vagrant/work/runner
+EnvironmentFile=/etc/runner-agent.env
+ExecStart=/usr/bin/node /home/vagrant/work/runner/agent.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+      sudo systemctl daemon-reload
+      sudo systemctl enable runner-agent
+      sudo systemctl restart runner-agent
+      sudo touch "$MARKER"
+    SHELL
   end
 end
 

@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const db = require("../config/database");
+const { createToken } = require("../middleware/auth");
 
 const register = async (req, res) => {
     const { nome, email, senha } = req.body;
@@ -40,12 +41,12 @@ const register = async (req, res) => {
         const senhaHash = await bcrypt.hash(String(senha), 10);
 
         const [resultado] = await db.query(
-            "INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, 'cliente')",
+            "INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)",
             [nomeFormatado, emailFormatado, senhaHash]
         );
 
         const [usuarioCriado] = await db.query(
-            "SELECT id, nome, email, tipo FROM usuarios WHERE id = ? LIMIT 1",
+            "SELECT id, nome, email FROM usuarios WHERE id = ? LIMIT 1",
             [resultado.insertId]
         );
 
@@ -73,7 +74,7 @@ const login = async (req, res) => {
 
     try {
         const [rows] = await db.query(
-            "SELECT id, nome, email, senha, tipo FROM usuarios WHERE email = ? LIMIT 1",
+            "SELECT id, nome, email, senha FROM usuarios WHERE email = ? LIMIT 1",
             [String(email).trim().toLowerCase()]
         );
 
@@ -97,7 +98,8 @@ const login = async (req, res) => {
 
         return res.status(200).json({
             message: "Login realizado com sucesso.",
-            usuario: dadosUsuario
+            usuario: dadosUsuario,
+            token: createToken(usuario.id)
         });
     } catch (error) {
         console.error("Erro ao autenticar usuário:", error);
