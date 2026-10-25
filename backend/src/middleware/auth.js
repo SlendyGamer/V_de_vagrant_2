@@ -1,3 +1,6 @@
+// Autenticação por token assinado (formato "payload.assinatura", HMAC-SHA256).
+// Feito com o módulo nativo crypto para não adicionar dependências.
+// O token só carrega o id do usuário; qualquer alteração invalida a assinatura.
 const crypto = require("crypto");
 
 const secret = () => process.env.TOKEN_SECRET || process.env.DB_PASSWORD || "dev-secret";
@@ -10,6 +13,8 @@ const createToken = (usuarioId) => {
     return `${payload}.${sign(payload)}`;
 };
 
+// Middleware: valida o token e coloca o id do usuário em req.usuarioId.
+// Os controllers usam esse id para filtrar tudo por dono.
 const requireAuth = (req, res, next) => {
     const header = req.headers.authorization || "";
     const [payload, signature] = header.replace(/^Bearer /, "").split(".");
@@ -20,6 +25,7 @@ const requireAuth = (req, res, next) => {
 
     const expected = Buffer.from(sign(payload));
     const received = Buffer.from(signature);
+    // comparação em tempo constante, para não vazar a assinatura por timing
     if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) {
         return res.status(401).json({ error: "Token inválido." });
     }

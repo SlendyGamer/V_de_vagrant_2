@@ -1,3 +1,5 @@
+// Rotas protegidas (/api/scripts e /api/ambientes). O router.use abaixo faz
+// toda rota deste arquivo exigir token válido.
 const express = require("express");
 const { requireAuth } = require("../middleware/auth");
 const { listScripts, createScript, deleteScript } = require("../controllers/scriptController");

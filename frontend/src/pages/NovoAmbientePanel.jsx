@@ -1,3 +1,5 @@
+// Formulário de criação: nome, limites (CPU %, memória MB, IO MB/s) e o script
+// (salvo, enviado do computador ou digitado).
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../services/api'
 

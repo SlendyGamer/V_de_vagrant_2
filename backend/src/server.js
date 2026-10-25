@@ -1,3 +1,5 @@
+// Ponto de entrada do backend: carrega o .env (DB, runner, segredos) e monta as rotas.
+// Não há mais código do projeto antigo (pedidos/cozinha); só auth e ambientes.
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -8,6 +10,7 @@ const ambienteRoutes = require("./Routes/ambienteRoutes");
 const app = express();
 
 app.use(cors());
+// 1mb porque o conteúdo dos scripts viaja dentro do JSON
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/", (req, res) => {
@@ -16,6 +19,7 @@ app.get("/", (req, res) => {
     });
 });
 
+// authRoutes (login/cadastro) vem primeiro e é público; ambienteRoutes exige token
 app.use("/api", authRoutes);
 app.use("/api", ambienteRoutes);
 

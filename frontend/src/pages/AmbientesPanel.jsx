@@ -1,3 +1,5 @@
+// Lista os ambientes com status, limites e ações (parar, remover, ver logs).
+// Recarrega sozinha a cada poucos segundos; o backend sincroniza o status com o runner.
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../services/api'
 import LogViewer from './LogViewer'

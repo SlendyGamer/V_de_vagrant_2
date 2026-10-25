@@ -1,3 +1,9 @@
+-- Schema do projeto. É reaplicado a cada provisionamento da VM db,
+-- por isso tudo usa IF NOT EXISTS (idempotente).
+--   usuarios   -> contas de login
+--   scripts    -> scripts enviados pelo usuário, guardados para reuso
+--   ambiente   -> cada ambiente isolado (namespaces/cgroups) com seus limites
+--   execucoes  -> histórico/resultado da execução de cada ambiente
 CREATE DATABASE IF NOT EXISTS vagrantdb;
 
 USE vagrantdb;

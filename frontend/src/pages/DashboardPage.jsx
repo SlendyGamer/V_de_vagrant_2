@@ -1,3 +1,4 @@
+// Painel principal: abas Ambientes / Novo ambiente / Scripts.
 import { useState } from 'react'
 import AmbientesPanel from './AmbientesPanel'
 import NovoAmbientePanel from './NovoAmbientePanel'

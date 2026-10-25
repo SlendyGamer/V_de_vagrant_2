@@ -1,3 +1,6 @@
+// Cliente HTTP do runner agent (VM runner, rede 10.1.3.0). O backend nunca
+// executa os programas: só pede ao runner para criar/consultar/parar ambientes.
+// Autentica com o token compartilhado (RUNNER_TOKEN) e aborta após 10s.
 const baseUrl = () => process.env.RUNNER_URL || "http://10.1.3.20:4000";
 
 const call = async (method, path, body) => {

@@ -1,3 +1,7 @@
+// Ciclo de vida dos ambientes. O banco guarda dono, limites e status; quem
+// realmente executa é o runner, e o status real é copiado dele (syncAmbiente).
+// Limites: cpu em % de 1 core, memória em MB, IO em MB/s.
+// Todas as consultas filtram por usuario_id (findOwned) -> 404 para outro usuário.
 const db = require("../config/database");
 const runner = require("../services/runnerClient");
 
@@ -12,6 +16,7 @@ const toInt = (value, min, max) => {
     return Number.isInteger(n) && n >= min && n <= max ? n : null;
 };
 
+// Atualiza o ambiente e a execução mais recente; finalizado_em só nos estados finais.
 const updateStatus = async (id, status, resultado) => {
     await db.query("UPDATE ambiente SET status = ? WHERE id = ?", [status, id]);
     await db.query(
@@ -74,6 +79,9 @@ const getAmbiente = async (req, res) => {
     }
 };
 
+// Fluxo: valida -> grava no banco (pendente) -> manda o runner iniciar ->
+// marca em_execucao. Se o runner falhar, o ambiente fica "erro" com o motivo.
+// O conteúdo executado vem de um script salvo ou do campo "comando".
 const createAmbiente = async (req, res) => {
     const nome = String(req.body.nome || "").trim();
     const cpu = toInt(req.body.cpu, 1, 100);
@@ -133,6 +141,8 @@ const createAmbiente = async (req, res) => {
     }
 };
 
+// Logs ficam em arquivo no runner; aqui só repassamos o trecho a partir de
+// "offset", assim serviços que nunca terminam podem ser lidos aos poucos.
 const getLogs = async (req, res) => {
     try {
         const ambiente = await findOwned(req.params.id, req.usuarioId);
@@ -161,6 +171,8 @@ const stopAmbiente = async (req, res) => {
     }
 };
 
+// Remove no runner (para o processo e apaga cgroup/log) e depois no banco.
+// 404 do runner é ignorado: o ambiente pode já ter sido limpo lá.
 const deleteAmbiente = async (req, res) => {
     try {
         const ambiente = await findOwned(req.params.id, req.usuarioId);

@@ -1,3 +1,7 @@
+# 4 VMs: frontend (Apache + build do Vite, porta 8080 no host), backend (Express),
+# db (MySQL) e runner (agent que cria os ambientes com cgroups + namespaces).
+# O provision clona o repositório do fork via HTTPS, então mudanças só chegam
+# às VMs depois do push. A VM runner usa jammy (cgroup v2 por padrão).
 Vagrant.configure("2") do |config|
   is_arm = RUBY_PLATFORM.include?("arm64") || RUBY_PLATFORM.include?("aarch64")
   box_name = is_arm ? "bento/ubuntu-22.04" : "ubuntu/focal64"

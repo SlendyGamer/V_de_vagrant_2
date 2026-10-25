@@ -1,3 +1,5 @@
+// Visualizador de logs: busca só o trecho novo usando "offset" e acompanha
+// (tail) enquanto o ambiente estiver em execução.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../services/api'
 

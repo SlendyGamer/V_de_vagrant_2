@@ -1,3 +1,5 @@
+// Scripts salvos: o navegador lê o arquivo e envia o texto em JSON (sem multipart);
+// ficam guardados para reuso em novos ambientes.
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../services/api'
 

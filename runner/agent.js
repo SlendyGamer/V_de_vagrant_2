@@ -1,5 +1,11 @@
 // Runner agent: cria ambientes isolados com namespaces (unshare) + cgroups v2.
 // Executar como root. Sem dependências externas.
+//
+// Cada ambiente = 1 cgroup (/sys/fs/cgroup/ambientes/env-<id>) que limita
+// CPU/memória/IO + 1 processo iniciado por "unshare" (PID, mount, UTS e IPC
+// próprios). É a versão "caseira" do que o Docker faz.
+// O backend fala com este serviço por HTTP (POST /envs, GET /envs/:id, ...),
+// sempre com o token compartilhado RUNNER_TOKEN.
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -33,6 +39,8 @@ const saveState = () => {
 
 const writeCg = (file, value) => fs.writeFileSync(file, String(value));
 
+// Habilita os controllers cpu/memory/io no cgroup raiz e no "ambientes";
+// sem isso os arquivos cpu.max/memory.max/io.max não existem nos filhos.
 const setupCgroups = () => {
     fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
     fs.mkdirSync(LOGS_DIR, { recursive: true });
@@ -58,6 +66,9 @@ const findBlockDevice = () => {
 };
 let blockDevice = null;
 
+// cpu.max "quota período": 20% de 1 core = "20000 100000".
+// memory.max em bytes; swap desligado para o limite ser real.
+// Falha no io.max vira aviso no log (não impede a execução).
 const applyLimits = (id, { cpu, memory, io }) => {
     const dir = cgroupPath(id);
     fs.mkdirSync(dir, { recursive: true });
@@ -89,6 +100,8 @@ const readOomKills = (id) => {
     }
 };
 
+// cgroup.kill (kernel 5.14+) mata todos os processos do ambiente de uma vez;
+// o fallback lê cgroup.procs e envia SIGKILL a cada um.
 const killCgroup = (id) => {
     const dir = cgroupPath(id);
     if (!fs.existsSync(dir)) return;
@@ -114,6 +127,7 @@ const cgroupIsEmpty = (id) => {
     }
 };
 
+// Estado final do ambiente: registra o resultado, libera o cgroup e persiste.
 const finish = (env, status, exitCode, reason) => {
     env.status = status;
     env.exitCode = exitCode;
@@ -124,6 +138,10 @@ const finish = (env, status, exitCode, reason) => {
     saveState();
 };
 
+// stdout/stderr vão direto para o arquivo de log (o agent não segura a saída em
+// memória), então serviços de longa duração não crescem o consumo do agent.
+// O script do usuário é salvo em arquivo e executado por bash: nunca é
+// interpolado em um comando, o que evita injeção de shell.
 const startEnv = ({ id, cpu, memory, io, script, net }) => {
     const env = { id, status: "em_execucao", pid: null, exitCode: null, reason: null, stopRequested: false, limits: { cpu, memory, io } };
     const warnings = applyLimits(id, env.limits);
@@ -151,6 +169,7 @@ const startEnv = ({ id, cpu, memory, io, script, net }) => {
     saveState();
 
     child.on("error", (error) => finish(env, "erro", null, `Falha ao iniciar: ${error.message}`));
+    // Como o término foi classificado: parada pedida pelo usuário > OOM > código de saída
     child.on("exit", (code, signal) => {
         const oom = readOomKills(id) > 0;
         if (env.stopRequested) {
@@ -197,6 +216,8 @@ const reconcile = () => {
     }, 2000);
 };
 
+// Leitura parcial do log a partir de "offset" (no máximo 64KB por chamada).
+// Devolve o novo offset para o cliente continuar de onde parou.
 const readLogs = (id, offset) => {
     const file = logFile(id);
     if (!fs.existsSync(file)) return { content: "", offset: 0, size: 0 };
@@ -213,6 +234,8 @@ const readLogs = (id, offset) => {
     return { content: buffer.toString("utf8"), offset: start + length, size };
 };
 
+// Token compartilhado com o backend, comparado em tempo constante.
+// Sem RUNNER_TOKEN configurado, toda requisição é recusada.
 const authorized = (req) => {
     const given = Buffer.from((req.headers.authorization || "").replace(/^Bearer /, ""));
     const expected = Buffer.from(TOKEN);

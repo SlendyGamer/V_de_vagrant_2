@@ -1,3 +1,5 @@
+// Cadastro e login. A senha é guardada só como hash (bcrypt); o login devolve
+// um token assinado que o frontend envia nas demais requisições.
 const bcrypt = require("bcryptjs");
 const db = require("../config/database");
 const { createToken } = require("../middleware/auth");
@@ -94,6 +96,7 @@ const login = async (req, res) => {
             });
         }
 
+        // remove o hash da resposta
         const { senha: senhaDoUsuario, ...dadosUsuario } = usuario;
 
         return res.status(200).json({

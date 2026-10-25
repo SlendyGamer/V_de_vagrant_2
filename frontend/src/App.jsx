@@ -1,3 +1,4 @@
+// Raiz da aplicação: sem token -> tela de login/cadastro; com token -> painel.
 import { useState } from 'react'
 import HomePage from './pages/HomePage'
 import DashboardPage from './pages/DashboardPage'

@@ -1,3 +1,7 @@
+// Scripts do usuário: ficam salvos no banco para serem reutilizados em vários
+// ambientes (requisito do enunciado). O arquivo é lido no navegador e enviado
+// como texto no JSON, então não é preciso upload multipart.
+// Todas as consultas filtram por usuario_id: ninguém mexe no script de outro.
 const db = require("../config/database");
 
 const MAX_SCRIPT_BYTES = 512 * 1024;
